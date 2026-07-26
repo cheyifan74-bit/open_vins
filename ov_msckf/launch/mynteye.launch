@@ -1,0 +1,80 @@
+<launch>
+
+    <!-- ================================================================ -->
+    <!-- MyntEye 双目相机 + OpenVINS 在线运行配置                            -->
+    <!-- 启动: roslaunch ov_msckf mynteye.launch                          -->
+    <!-- ================================================================ -->
+
+    <!-- 日志级别: ALL, DEBUG, INFO, WARNING, ERROR, SILENT -->
+    <arg name="verbosity"   default="INFO" />
+    <arg name="config"      default="mynteye" />
+    <arg name="config_path" default="$(find ov_msckf)/../config/$(arg config)/estimator_config.yaml" />
+
+    <!-- 双目 / 相机数量 -->
+    <arg name="max_cameras" default="2" />
+    <arg name="use_stereo"  default="true" />
+
+    <!-- 是否保存轨迹和计时 -->
+    <arg name="dosave"      default="false" />
+    <arg name="dotime"      default="false" />
+    <arg name="path_est"    default="/tmp/traj_estimate.txt" />
+    <arg name="path_time"   default="/tmp/traj_timing.txt" />
+
+    <!-- 是否显示对齐后的 groundtruth 轨迹（需要外部真值数据） -->
+    <arg name="dolivetraj"  default="false" />
+    <arg name="path_gt"     default="$(find ov_data)/$(arg config)/dataset.txt" />
+
+    <!-- 是否启动 RViz -->
+    <arg name="doviz"       default="true" />
+    <arg name="rviz_config" default="$(find ov_msckf)/launch/display.rviz" />
+
+
+    <!-- ================================================================ -->
+    <!-- OpenVINS MSCKF 主节点 -->
+    <!-- ================================================================ -->
+    <node name="ov_msckf" pkg="ov_msckf" type="run_subscribe_msckf" output="screen" clear_params="true" required="true">
+
+        <!-- 主配置文件 -->
+        <param name="verbosity"              type="string" value="$(arg verbosity)" />
+        <param name="config_path"            type="string" value="$(arg config_path)" />
+
+        <!-- 系统参数（可通过 ROS 覆盖配置文件中的值） -->
+        <param name="use_stereo"             type="bool"   value="$(arg use_stereo)" />
+        <param name="max_cameras"            type="int"    value="$(arg max_cameras)" />
+
+        <!-- 计时统计 -->
+        <param name="record_timing_information"   type="bool"   value="$(arg dotime)" />
+        <param name="record_timing_filepath"      type="string" value="$(arg path_time)" />
+
+    </node>
+
+
+    <!-- ================================================================ -->
+    <!-- RViz 可视化 -->
+    <!-- ================================================================ -->
+    <group if="$(arg doviz)">
+        <node name="rviz" pkg="rviz" type="rviz" output="log" required="false"
+              args="-d $(arg rviz_config)" />
+    </group>
+
+
+    <!-- ================================================================ -->
+    <!-- 轨迹录制（可选） -->
+    <!-- ================================================================ -->
+    <group if="$(arg dosave)">
+        <node name="recorder_estimate" pkg="ov_eval" type="pose_to_file" output="screen" required="true">
+            <param name="topic"      type="str" value="/ov_msckf/poseimu" />
+            <param name="topic_type" type="str" value="PoseWithCovarianceStamped" />
+            <param name="output"     type="str" value="$(arg path_est)" />
+        </node>
+    </group>
+
+    <!-- Groundtruth 对齐轨迹显示（可选） -->
+    <group if="$(arg dolivetraj)">
+        <node name="live_align_trajectory" pkg="ov_eval" type="live_align_trajectory" output="log" clear_params="true">
+            <param name="alignment_type" type="str" value="posyaw" />
+            <param name="path_gt"        type="str" value="$(arg path_gt)" />
+        </node>
+    </group>
+
+</launch>
