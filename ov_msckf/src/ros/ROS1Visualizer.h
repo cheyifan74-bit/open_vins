@@ -53,6 +53,7 @@
 
 namespace ov_core {
 class YamlParser;
+struct ImuData;
 struct CameraData;
 } // namespace ov_core
 
@@ -113,6 +114,21 @@ public:
 
   /// Callback for synchronized stereo camera information
   void callback_stereo(const sensor_msgs::ImageConstPtr &msg0, const sensor_msgs::ImageConstPtr &msg1, int cam_id0, int cam_id1);
+
+  /**
+   * @brief High-level IMU data entry point with scheduling.
+   *        Feeds IMU to VioManager, triggers visualize_odometry, then drains
+   *        the camera queue for time-aligned image processing in a worker thread.
+   * @param message ImuData (already converted from ROS by the caller)
+   */
+  void handleImuMeasurement(const ov_core::ImuData &message);
+
+  /**
+   * @brief High-level camera data entry point with rate limiting and queuing.
+   *        Actual processing is triggered by handleImuMeasurement() when a newer IMU arrives.
+   * @param message CameraData (already converted from ROS by the caller)
+   */
+  void handleCameraMeasurement(const ov_core::CameraData &message);
 
 protected:
   /// Publish the current state

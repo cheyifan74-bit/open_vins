@@ -1005,3 +1005,82 @@ void ROS1Visualizer::publish_loopclosure_information() {
     it_pub_loop_img_depth_color.publish(exl_msg2);
   }
 }
+
+void ROS1Visualizer::handleImuMeasurement(const ov_core::ImuData &message) {
+
+  // Feed IMU to propagator and initializer
+  _app->feed_measurement_imu(message);
+
+  // High-frequency odometry visualization
+  visualize_odometry(message.timestamp);
+
+  // If the processing thread is already running, return so we keep buffering
+  if (thread_update_running)
+    return;
+
+  thread_update_running = true;
+  std::thread thread([this, message] {
+    // Lock the queue — prevent concurrent camera pushes
+    std::lock_guard<std::mutex> lck(camera_queue_mtx);
+
+    // Gather distinct camera streams already in queue
+    std::map<int, bool> unique_cam_ids;
+    for (const auto &cam_msg : camera_queue) {
+      unique_cam_ids[cam_msg.sensor_ids.at(0)] = true;
+    }
+
+    // For stereo, both images arrive in one CameraData (sensor_ids.size()==2),
+    // so we only need one unique stream to proceed.
+    auto params = _app->get_params();
+    size_t num_unique_cameras = (params.state_options.num_cameras == 2) ? 1 : params.state_options.num_cameras;
+
+    if (unique_cam_ids.size() == num_unique_cameras) {
+
+      // Drain camera queue: process each CameraData whose timestamp is older
+      // than the latest IMU (IMU timestamp adjusted by cam-imu time offset).
+      double timestamp_imu_inC = message.timestamp - _app->get_state()->_calib_dt_CAMtoIMU->value()(0);
+
+      while (!camera_queue.empty() && camera_queue.at(0).timestamp < timestamp_imu_inC) {
+        auto rT0_1 = boost::posix_time::microsec_clock::local_time();
+        double update_dt = 100.0 * (timestamp_imu_inC - camera_queue.at(0).timestamp);
+
+        _app->feed_measurement_camera(camera_queue.at(0));
+        visualize();
+        camera_queue.pop_front();
+
+        auto rT0_2 = boost::posix_time::microsec_clock::local_time();
+        double time_total = (rT0_2 - rT0_1).total_microseconds() * 1e-6;
+        PRINT_INFO(BLUE "[TIME]: %.4f seconds total (%.1f hz, %.2f ms behind)\n" RESET, time_total, 1.0 / time_total, update_dt);
+      }
+    }
+
+    thread_update_running = false;
+  });
+
+  // Single-thread or detach based on config
+  if (!_app->get_params().use_multi_threading_subs) {
+    thread.join();
+  } else {
+    thread.detach();
+  }
+}
+
+void ROS1Visualizer::handleCameraMeasurement(const ov_core::CameraData &message) {
+
+  // Rate limit: drop frames faster than track_frequency
+  double timestamp = message.timestamp;
+  double time_delta = 1.0 / _app->get_params().track_frequency;
+  int cam_id = message.sensor_ids.at(0);
+  auto it = camera_last_timestamp.find(cam_id);
+  if (it != camera_last_timestamp.end() && timestamp < it->second + time_delta) {
+    return;
+  }
+  camera_last_timestamp[cam_id] = timestamp;
+
+  // Enqueue (sorted by timestamp)
+  {
+    std::lock_guard<std::mutex> lck(camera_queue_mtx);
+    camera_queue.push_back(message);
+    std::sort(camera_queue.begin(), camera_queue.end());
+  }
+}
