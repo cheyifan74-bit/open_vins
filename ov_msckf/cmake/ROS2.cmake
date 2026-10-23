@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.10)
 
 # Find ROS build system
 find_package(ament_cmake REQUIRED)
@@ -61,6 +61,7 @@ list(APPEND LIBRARY_SOURCES
         src/state/Propagator.cpp
         src/core/VioManager.cpp
         src/core/VioManagerHelper.cpp
+        src/core/MeasurementScheduler.cpp
         src/update/UpdaterHelper.cpp
         src/update/UpdaterMSCKF.cpp
         src/update/UpdaterSLAM.cpp

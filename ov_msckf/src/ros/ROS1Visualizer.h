@@ -61,6 +61,7 @@ namespace ov_msckf {
 
 class VioManager;
 class Simulator;
+class MeasurementScheduler;
 
 /**
  * @brief Helper class that will publish results onto the ROS framework.
@@ -197,6 +198,9 @@ protected:
 
   // Last camera message timestamps we have received (mapped by cam id)
   std::map<int, double> camera_last_timestamp;
+
+  /// Shared IMU/camera scheduler behind handleImuMeasurement() / handleCameraMeasurement()
+  std::shared_ptr<MeasurementScheduler> _scheduler;
 
   // Last timestamp we visualized at
   double last_visualization_timestamp = 0;

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.10)
 
 # Find ROS build system
 find_package(catkin QUIET COMPONENTS roscpp rosbag tf std_msgs geometry_msgs sensor_msgs nav_msgs visualization_msgs image_transport cv_bridge ov_core ov_init)
@@ -83,6 +83,7 @@ list(APPEND LIBRARY_SOURCES
         src/state/Propagator.cpp
         src/core/VioManager.cpp
         src/core/VioManagerHelper.cpp
+        src/core/MeasurementScheduler.cpp
         src/update/UpdaterHelper.cpp
         src/update/UpdaterMSCKF.cpp
         src/update/UpdaterSLAM.cpp

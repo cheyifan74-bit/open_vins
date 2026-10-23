@@ -21,6 +21,7 @@
 
 #include "ROS2Visualizer.h"
 
+#include "core/MeasurementScheduler.h"
 #include "core/VioManager.h"
 #include "ros/ROSVisualizerHelper.h"
 #include "sim/Simulator.h"
@@ -37,6 +38,10 @@ using namespace ov_msckf;
 
 ROS2Visualizer::ROS2Visualizer(std::shared_ptr<rclcpp::Node> node, std::shared_ptr<VioManager> app, std::shared_ptr<Simulator> sim)
     : _node(node), _app(app), _sim(sim), thread_update_running(false) {
+
+  // Shared IMU/camera scheduling used by handleImuMeasurement() / handleCameraMeasurement()
+  _scheduler = std::make_shared<MeasurementScheduler>(
+      _app, [this] { visualize(); }, [this](double timestamp) { visualize_odometry(timestamp); });
 
   // Setup our transform broadcaster
   mTfBr = std::make_shared<tf2_ros::TransformBroadcaster>(node);
@@ -997,3 +1002,7 @@ void ROS2Visualizer::publish_loopclosure_information() {
     it_pub_loop_img_depth_color.publish(exl_msg2);
   }
 }
+
+void ROS2Visualizer::handleImuMeasurement(const ov_core::ImuData &message) { _scheduler->feed_imu(message); }
+
+void ROS2Visualizer::handleCameraMeasurement(const ov_core::CameraData &message) { _scheduler->feed_camera(message); }

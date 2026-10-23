@@ -1,5 +1,9 @@
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.10)
 project(ov_data)
+
+# scripts/build_ros2.sh passes -DCeres_DIR to every package. This one does not link Ceres.
+set(_ignored_ceres_dir "${Ceres_DIR}")
+unset(_ignored_ceres_dir)
 
 # Find our ROS version!
 # NOTE: Default to using the ROS1 package if both are in our enviroment

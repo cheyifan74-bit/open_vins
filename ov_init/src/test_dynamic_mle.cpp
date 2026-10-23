@@ -206,6 +206,7 @@ int main(int argc, char **argv) {
           Eigen::Matrix<double, 17, 1> gt_imustate;
           bool success = sim.get_state(time1, gt_imustate);
           assert(success);
+          (void)success;
           state_k1 = gt_imustate.block(1, 0, 16, 1);
 
         } else {

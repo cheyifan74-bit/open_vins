@@ -1,5 +1,16 @@
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.10)
 project(ov_eval)
+
+# CMake 3.30+ removes FindBoost; 3.27+ removes FindPythonLibs. Keep both modules.
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 OLD)
+endif()
+if(POLICY CMP0148)
+    cmake_policy(SET CMP0148 OLD)
+endif()
+# scripts/build_ros2.sh passes -DCeres_DIR to every package. This one does not link Ceres.
+set(_ignored_ceres_dir "${Ceres_DIR}")
+unset(_ignored_ceres_dir)
 
 # Include libraries
 find_package(Eigen3 REQUIRED)

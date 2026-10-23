@@ -1,5 +1,13 @@
-cmake_minimum_required(VERSION 3.3)
+cmake_minimum_required(VERSION 3.10)
 project(ov_init)
+
+# CMake 3.30+ removes FindBoost; 3.27+ removes FindPythonLibs. Keep both modules.
+if(POLICY CMP0167)
+    cmake_policy(SET CMP0167 OLD)
+endif()
+if(POLICY CMP0148)
+    cmake_policy(SET CMP0148 OLD)
+endif()
 
 
 # Include libraries (if we don't have opencv 4, then fallback to opencv 3)

@@ -190,6 +190,7 @@ int main(int argc, char **argv) {
         Eigen::Matrix<double, 17, 1> gt_imu;
         bool success1 = sim.get_state(timestamp + sim.get_true_parameters().calib_camimu_dt, gt_imu);
         assert(success1);
+        (void)success1;
         Eigen::Matrix3d R_ESTtoGT_imu;
         Eigen::Vector3d t_ESTinGT_imu;
         align_posyaw_single(_imu->quat(), _imu->pos(), gt_imu.block(1, 0, 4, 1), gt_imu.block(5, 0, 3, 1), R_ESTtoGT_imu, t_ESTinGT_imu);

@@ -25,7 +25,7 @@
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
-#include <image_transport/image_transport.h>
+#include <image_transport/image_transport.hpp>
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/time_synchronizer.h>
@@ -42,7 +42,7 @@
 #include <std_msgs/msg/float64.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/transform_datatypes.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_ros/transform_broadcaster.h>
 
 #include <atomic>
@@ -57,6 +57,7 @@
 
 namespace ov_core {
 class YamlParser;
+struct ImuData;
 struct CameraData;
 } // namespace ov_core
 
@@ -64,6 +65,7 @@ namespace ov_msckf {
 
 class VioManager;
 class Simulator;
+class MeasurementScheduler;
 
 /**
  * @brief Helper class that will publish results onto the ROS framework.
@@ -118,6 +120,21 @@ public:
   /// Callback for synchronized stereo camera information
   void callback_stereo(const sensor_msgs::msg::Image::ConstSharedPtr msg0, const sensor_msgs::msg::Image::ConstSharedPtr msg1, int cam_id0,
                        int cam_id1);
+
+  /**
+   * @brief High-level IMU data entry point with scheduling.
+   *        Feeds IMU to VioManager, triggers visualize_odometry, then drains
+   *        the camera queue for time-aligned image processing in a worker thread.
+   * @param message ImuData (already converted from ROS by the caller)
+   */
+  void handleImuMeasurement(const ov_core::ImuData &message);
+
+  /**
+   * @brief High-level camera data entry point with rate limiting and queuing.
+   *        Actual processing is triggered by handleImuMeasurement() when a newer IMU arrives.
+   * @param message CameraData (already converted from ROS by the caller)
+   */
+  void handleCameraMeasurement(const ov_core::CameraData &message);
 
 protected:
   /// Publish the current state
@@ -190,6 +207,9 @@ protected:
 
   // Last camera message timestamps we have received (mapped by cam id)
   std::map<int, double> camera_last_timestamp;
+
+  /// Shared IMU/camera scheduler behind handleImuMeasurement() / handleCameraMeasurement()
+  std::shared_ptr<MeasurementScheduler> _scheduler;
 
   // Last timestamp we visualized at
   double last_visualization_timestamp = 0;
