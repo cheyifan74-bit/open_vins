@@ -48,6 +48,12 @@ private:
 
   std::atomic<bool> thread_update_running{false};
 
+  /// Serializes ALL estimator access between the IMU callback thread and the
+  /// (detached) camera-update thread. VioManager/InertialInitializer keep the IMU
+  /// buffer in a plain std::vector, so feeding IMU while a tracking update is
+  /// pruning/scanning that buffer reallocates it under the reader and crashes.
+  std::mutex vio_mtx_;
+
   std::deque<ov_core::CameraData> camera_queue;
   std::mutex camera_queue_mtx;
 
