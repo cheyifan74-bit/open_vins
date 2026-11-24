@@ -386,32 +386,50 @@ void VioManager::retriangulate_active_tracks(const ov_core::CameraData &message)
   PRINT_ALL(CYAN "[RETRI-TIME]: %.4f seconds total\n" RESET, (retri_rT3 - retri_rT1).total_microseconds() * 1e-6);
 }
 
-cv::Mat VioManager::get_historical_viz_image() {
+VioManager::HistoricalVizSnapshot VioManager::get_historical_viz_snapshot() {
+
+  HistoricalVizSnapshot snapshot;
 
   // Return if not ready yet
   if (state == nullptr || trackFEATS == nullptr)
-    return cv::Mat();
+    return snapshot;
 
   // Build an id-list of what features we should highlight (i.e. SLAM)
-  std::vector<size_t> highlighted_ids;
+  snapshot.highlighted_ids.reserve(state->_features_SLAM.size());
   for (const auto &feat : state->_features_SLAM) {
-    highlighted_ids.push_back(feat.first);
+    snapshot.highlighted_ids.push_back(feat.first);
   }
 
   // Text we will overlay if needed
-  std::string overlay = (did_zupt_update) ? "zvupt" : "";
-  overlay = (!is_initialized_vio) ? "init" : overlay;
+  snapshot.overlay = (!is_initialized_vio) ? "init" : ((did_zupt_update) ? "zvupt" : "");
+
+  // Keep the trackers alive while the image is drawn outside the VIO lock.
+  snapshot.track_feats = trackFEATS;
+  snapshot.track_aruco = trackARUCO;
+  return snapshot;
+}
+
+cv::Mat VioManager::get_historical_viz_image(const HistoricalVizSnapshot &snapshot) {
+
+  if (snapshot.track_feats == nullptr)
+    return cv::Mat();
 
   // Get the current active tracks
   cv::Mat img_history;
-  trackFEATS->display_history(img_history, 255, 255, 0, 255, 255, 255, highlighted_ids, overlay);
-  if (trackARUCO != nullptr) {
-    trackARUCO->display_history(img_history, 0, 255, 255, 255, 255, 255, highlighted_ids, overlay);
-    // trackARUCO->display_active(img_history, 0, 255, 255, 255, 255, 255, overlay);
+  snapshot.track_feats->display_history(img_history, 255, 255, 0, 255, 255, 255, snapshot.highlighted_ids,
+                                        snapshot.overlay);
+  if (snapshot.track_aruco != nullptr) {
+    snapshot.track_aruco->display_history(img_history, 0, 255, 255, 255, 255, 255, snapshot.highlighted_ids,
+                                          snapshot.overlay);
+    // snapshot.track_aruco->display_active(img_history, 0, 255, 255, 255, 255, 255, snapshot.overlay);
   }
 
   // Finally return the image
   return img_history;
+}
+
+cv::Mat VioManager::get_historical_viz_image() {
+  return get_historical_viz_image(get_historical_viz_snapshot());
 }
 
 std::vector<Eigen::Vector3d> VioManager::get_features_SLAM() {

@@ -30,6 +30,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "VioManagerOptions.h"
 
@@ -110,7 +111,26 @@ public:
   /// Accessor to get the current propagator
   std::shared_ptr<Propagator> get_propagator() { return propagator; }
 
-  /// Get a nice visualization image of what tracks we have
+  /// Snapshot of the VIO-owned state needed to draw the tracking history.
+  /// Take it while holding lock_vio(); drawing then happens after the lock is
+  /// released, so the image thread never blocks the estimator on cv::Mat work.
+  struct HistoricalVizSnapshot {
+    std::vector<size_t> highlighted_ids;
+    std::string overlay;
+    std::shared_ptr<ov_core::TrackBase> track_feats;
+    std::shared_ptr<ov_core::TrackBase> track_aruco;
+  };
+
+  /// Copy the feature ids / overlay / tracker pointers. Caller must hold lock_vio().
+  HistoricalVizSnapshot get_historical_viz_snapshot();
+
+  /// Draw the tracking history from a snapshot. Safe to call without lock_vio():
+  /// the tracker guards its image/keypoint caches and the feature database with
+  /// their own locks.
+  cv::Mat get_historical_viz_image(const HistoricalVizSnapshot &snapshot);
+
+  /// Legacy helper: snapshot + draw. Caller must hold lock_vio(), so the drawing
+  /// stays inside the lock; prefer the two-step API from publishing threads.
   cv::Mat get_historical_viz_image();
 
   /// Returns 3d SLAM features in the global frame

@@ -46,9 +46,16 @@
 #include <tf2_ros/transform_broadcaster.h>
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <deque>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <thread>
+#include <utility>
+#include <vector>
 
 #include <Eigen/Eigen>
 #include <boost/date_time/posix_time/posix_time.hpp>
@@ -66,6 +73,7 @@ namespace ov_msckf {
 class VioManager;
 class Simulator;
 class MeasurementScheduler;
+class State;
 
 /**
  * @brief Helper class that will publish results onto the ROS framework.
@@ -87,6 +95,9 @@ public:
    * @param sim Simulator if we are simulating
    */
   ROS2Visualizer(std::shared_ptr<rclcpp::Node> node, std::shared_ptr<VioManager> app, std::shared_ptr<Simulator> sim = nullptr);
+
+  /// Stops the publisher thread
+  ~ROS2Visualizer();
 
   /**
    * @brief Will setup ROS subscribers and callbacks
@@ -136,21 +147,39 @@ public:
    */
   void handleCameraMeasurement(const ov_core::CameraData &message);
 
+  /// Blocks estimator updates while the caller reads the state; release it before publishing.
+  std::unique_lock<std::mutex> lock_vio();
+
+  /// Called once per new filter state (same moment poseimu is built), only after
+  /// initialization, on the update thread with the estimator locked. Keep it cheap
+  /// and never call lock_vio() from it. Set before feeding measurements.
+  using StateCallback = std::function<void(const State &)>;
+  void set_state_callback(StateCallback callback) { state_callback = std::move(callback); }
+
 protected:
-  /// Publish the current state
-  void publish_state();
+  /// Deferred publish calls: messages are built under the VIO lock and published afterwards.
+  using Outbox = std::vector<std::function<void()>>;
+
+  /// Build the current state messages
+  void publish_state(Outbox &outbox);
 
   /// Publish the active tracking image
   void publish_images();
 
-  /// Publish current features
-  void publish_features();
+  /// Build current feature messages
+  void publish_features(Outbox &outbox);
 
-  /// Publish groundtruth (if we have it)
-  void publish_groundtruth();
+  /// Build groundtruth messages (if we have it)
+  void publish_groundtruth(Outbox &outbox);
 
-  /// Publish loop-closure information of current pose and active track information
-  void publish_loopclosure_information();
+  /// Build loop-closure information of current pose and active track information
+  void publish_loopclosure_information(Outbox &outbox);
+
+  /// Hand publish calls to the publisher thread, so a slow DDS send never stalls IMU or the filter update
+  void enqueue_publish(Outbox outbox);
+
+  /// Runs queued publish calls until the destructor stops it
+  void publish_loop();
 
   /// Global node handler
   std::shared_ptr<rclcpp::Node> _node;
@@ -208,8 +237,20 @@ protected:
   // Last camera message timestamps we have received (mapped by cam id)
   std::map<int, double> camera_last_timestamp;
 
+  /// Publisher thread state. Declared before _scheduler so it outlives the update thread the scheduler waits for.
+  std::deque<Outbox> publish_queue;
+  std::mutex publish_mtx;
+  std::condition_variable publish_cv;
+  bool publish_stop = false;
+  std::thread publish_thread;
+
+  /// pathimu carries up to 16384 poses, so it is sent at a lower rate than poseimu
+  std::chrono::steady_clock::time_point last_path_publish;
+
   /// Shared IMU/camera scheduler behind handleImuMeasurement() / handleCameraMeasurement()
   std::shared_ptr<MeasurementScheduler> _scheduler;
+
+  StateCallback state_callback;
 
   // Last timestamp we visualized at
   double last_visualization_timestamp = 0;

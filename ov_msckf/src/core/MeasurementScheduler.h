@@ -39,6 +39,10 @@ public:
   /// Rate limit by track_frequency and enqueue (sorted by timestamp); processing is triggered by feed_imu()
   void feed_camera(const ov_core::CameraData &message);
 
+  /// Lock out estimator mutations while reading the state from another thread
+  /// (visualization, pose conversion). Never publish while holding it.
+  std::unique_lock<std::mutex> lock_vio() { return std::unique_lock<std::mutex>(vio_mtx_); }
+
 private:
   void process_camera_queue(double timestamp_imu);
 
@@ -48,10 +52,11 @@ private:
 
   std::atomic<bool> thread_update_running{false};
 
-  /// Serializes ALL estimator access between the IMU callback thread and the
+  /// Serializes estimator mutations between the IMU callback thread and the
   /// (detached) camera-update thread. VioManager/InertialInitializer keep the IMU
   /// buffer in a plain std::vector, so feeding IMU while a tracking update is
   /// pruning/scanning that buffer reallocates it under the reader and crashes.
+  /// Visualization callbacks must NOT run while holding this lock.
   std::mutex vio_mtx_;
 
   std::deque<ov_core::CameraData> camera_queue;

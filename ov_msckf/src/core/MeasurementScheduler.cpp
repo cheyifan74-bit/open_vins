@@ -35,13 +35,13 @@ void MeasurementScheduler::feed_imu(const ov_core::ImuData &message) {
   // initializer/propagator keep IMU samples in std::vector, so a concurrent
   // tracking update that scans/prunes that vector while we push_back into it
   // is a use-after-free (observed as SIGSEGV during VIO initialization).
+  // Visualization stays OUTSIDE the lock so ROS publish / TF cannot stall IMU.
   {
     std::lock_guard<std::mutex> lck(vio_mtx_);
     _app->feed_measurement_imu(message);
-    // High-frequency odometry visualization (reads VIO state -> same lock)
-    if (_on_imu)
-      _on_imu(message.timestamp);
   }
+  if (_on_imu)
+    _on_imu(message.timestamp);
 
   // If the processing thread is already running, return so we keep buffering
   bool expected = false;
@@ -104,12 +104,14 @@ void MeasurementScheduler::process_camera_queue(double timestamp_imu) {
     auto rT0_1 = boost::posix_time::microsec_clock::local_time();
     double update_dt = 100.0 * (timestamp_imu_inC - cam_msg.timestamp);
 
+    // Only the estimator mutation needs vio_mtx_. Publishing pose/features/path
+    // under the same lock made IMU wait on RViz/DDS and amplified tracking stalls.
     {
       std::lock_guard<std::mutex> vio_lck(vio_mtx_);
       _app->feed_measurement_camera(cam_msg);
-      if (_on_camera_update)
-        _on_camera_update();
     }
+    if (_on_camera_update)
+      _on_camera_update();
 
     auto rT0_2 = boost::posix_time::microsec_clock::local_time();
     double time_total = (rT0_2 - rT0_1).total_microseconds() * 1e-6;

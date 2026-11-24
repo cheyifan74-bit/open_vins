@@ -45,10 +45,30 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Enable compile optimizations
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fsee -fomit-frame-pointer -fno-signed-zeros -fno-math-errno -funroll-loops")
+# NOTE: -fsee only exists on the MIPS/SGI compiler target and is a no-op warning on x86, removed.
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -fomit-frame-pointer -fno-signed-zeros -fno-math-errno -funroll-loops -ffp-contract=fast")
 
-# Enable debug flags (use if you want to debug in gdb)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g3 -Wall -Wuninitialized -Wmaybe-uninitialized")
+# Tune for the machine that compiles this code (AVX2/FMA/BMI2 on Alder Lake).
+# Set -DENABLE_NATIVE_OPT=OFF when cross-compiling or when moving the binary to an older CPU.
+option(ENABLE_NATIVE_OPT "Compile with -march=native/-mtune=native" ON)
+if (ENABLE_NATIVE_OPT)
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-march=native" HAS_MARCH_NATIVE)
+    if (HAS_MARCH_NATIVE)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mtune=native")
+        message(STATUS "NATIVE OPT: enabled (-march=native)")
+    else ()
+        message(STATUS "NATIVE OPT: requested but compiler rejects -march=native")
+    endif ()
+endif ()
+
+# Enable debug flags (use if you want to debug in gdb). Disabled by default:
+# full -g3 debug info only slows the link and bloats the binaries, it does not change runtime speed.
+option(ENABLE_DEBUG_SYMBOLS "Compile with -g3 for gdb" OFF)
+if (ENABLE_DEBUG_SYMBOLS)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g3")
+endif ()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wuninitialized -Wmaybe-uninitialized")
 
 # Find our ROS version!
 # NOTE: Default to using the ROS1 package if both are in our enviroment
